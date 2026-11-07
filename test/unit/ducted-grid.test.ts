@@ -1,6 +1,7 @@
 import { expect } from '@open-wc/testing';
 import '../../src/material-thermostat-card';
-import { MaterialDuctedThermostatCard } from '../../src/material-ducted-thermostat-card';
+import '../../src/material-ducted-thermostat-card';
+import type { MaterialDuctedThermostatCard } from '../../src/material-ducted-thermostat-card';
 import { makeHass, climateState } from '../helpers';
 
 const zones = [
