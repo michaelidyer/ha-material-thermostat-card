@@ -31,7 +31,7 @@ export interface DuctedGridCardConfig {
  * This first milestone intentionally does NOT implement MyZone/zone power
  * commands. Existing climate.set_temperature behavior remains unchanged.
  */
-@customElement(DUCTED_CARD_TYPE)
+@customElement('material-ducted-thermostat-card')
 export class MaterialDuctedThermostatCard extends LitElement implements LovelaceCard {
   @property({ attribute: false }) hass!: HomeAssistant;
   @state() private _config?: DuctedGridCardConfig;
