@@ -6,14 +6,7 @@ import terser from '@rollup/plugin-terser';
 
 const dev = process.env.ROLLUP_WATCH === 'true';
 
-export default {
-  input: 'src/material-thermostat-card.ts',
-  output: {
-    file: 'dist/material-thermostat-card.js',
-    format: 'es',
-    sourcemap: dev,
-    inlineDynamicImports: true,
-  },
+const base = {
   plugins: [
     resolve(),
     commonjs(),
@@ -32,3 +25,18 @@ export default {
     warn(warning);
   },
 };
+
+// Keep the new experimental component in a separate resource. It composes
+// the already-installed material-thermostat-card and must load after it.
+export default [
+  {
+    ...base,
+    input: 'src/material-thermostat-card.ts',
+    output: { file: 'dist/material-thermostat-card.js', format: 'es', sourcemap: dev, inlineDynamicImports: true },
+  },
+  {
+    ...base,
+    input: 'src/material-ducted-thermostat-card.ts',
+    output: { file: 'dist/material-ducted-thermostat-card.js', format: 'es', sourcemap: dev, inlineDynamicImports: true },
+  },
+];
