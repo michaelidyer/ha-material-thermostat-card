@@ -39,6 +39,7 @@ import { parseReading, sensorTempUnit, systemTempUnit, toCelsius, fromCelsius } 
 import { registerMtIcons } from './register-icons';
 import { ensureGoogleSansFlex } from './font';
 import './dial/circular-dial';
+import './material-ducted-thermostat-card';
 import './features/feature-row';
 
 // Make the `mt:` AC swing icons available to Home Assistant as early as possible.
