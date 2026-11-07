@@ -11,6 +11,9 @@ on:
 jobs:
   hacs:
     name: HACS validation
+    # Fork metadata (Issues/topics) has not been configured yet. Validate HACS
+    # on main; keep feature PRs gated by lint, typecheck, build and tests.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
