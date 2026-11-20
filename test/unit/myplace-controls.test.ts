@@ -254,7 +254,7 @@ describe('MyPlace controls', () => {
     } finally { el.remove(); }
   });
 
-  it('uses the configured zone-off script and leaves zone-on as native climate', async () => {
+  it('routes zone on and off through independently configured scripts', async () => {
     const el = document.createElement('mt-myplace-zone-power');
     el.systemEntity = 'climate.ac';
     el.myzoneEntity = 'select.ac_myzone';
@@ -262,6 +262,7 @@ describe('MyPlace controls', () => {
     el.entity = 'climate.ac_guest';
     el.masterOption = 'Guest';
     el.zoneOffScript = 'script.ducted_ac_zone_off';
+    el.zoneOnScript = 'script.ducted_ac_zone_on';
     el.hass = makeHass({
       'climate.ac_guest': climateState({}, 'cool'),
       'climate.ac': climateState({ preset_mode: 'MyZone' }, 'cool'),
@@ -284,8 +285,9 @@ describe('MyPlace controls', () => {
       await el.updateComplete;
       (el.shadowRoot!.querySelector('button') as HTMLButtonElement).click();
       await el.updateComplete;
-      expect(el.hass.__calls[0].service).to.equal('turn_on');
-      expect(el.hass.__calls[0].domain).to.equal('climate');
+      expect(el.hass.__calls[0].service).to.equal('ducted_ac_zone_on');
+      expect(el.hass.__calls[0].domain).to.equal('script');
+      expect(el.hass.__calls[0].data).to.deep.equal({zone: 'Guest', zone_entity: 'climate.ac_guest'});
     } finally { el.remove(); }
   });
 
