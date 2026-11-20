@@ -60,7 +60,8 @@ export class MtMyplaceSystemControls extends LitElement {
       ? (system?.attributes.hvac_modes as string[] | undefined) ?? []
       : (system?.attributes.fan_modes as string[] | undefined) ?? [];
     // The existing control script has no verified 'off' operation.
-    if (!allowed.includes(value) || (operation === 'mode' && value === 'off')) return;
+    if (!allowed.includes(value) ||
+        (operation === 'mode' && !['cool', 'heat', 'dry', 'fan_only'].includes(value))) return;
     this.busy = true;
     this.error = '';
     try {
@@ -76,7 +77,8 @@ export class MtMyplaceSystemControls extends LitElement {
     const state = this.hass?.states[this.entity];
     const mode = state?.state ?? '';
     const fan = String(state?.attributes.fan_mode ?? '');
-    const modes = ((state?.attributes.hvac_modes as string[] | undefined) ?? []).filter((x) => x !== 'off');
+    const modes = ((state?.attributes.hvac_modes as string[] | undefined) ?? [])
+      .filter((x) => ['cool', 'heat', 'dry', 'fan_only'].includes(x));
     const fans = (state?.attributes.fan_modes as string[] | undefined) ?? [];
     const myzone = this.hass?.states[this.myzoneEntity]?.state;
     const unavailable = !state || mode === 'unavailable' || mode === 'unknown';
@@ -84,7 +86,7 @@ export class MtMyplaceSystemControls extends LitElement {
       <div class="heading">Ducted AC <span class="status">${mode || 'Unavailable'}</span></div>
       <label>Mode
         <select aria-label="Ducted HVAC mode" .value=${modes.includes(mode) ? mode : ''}
-          ?disabled=${unavailable || this.busy || modes.length === 0}
+          ?disabled=${unavailable || this.busy || mode === 'off' || modes.length === 0}
           @change=${(e: Event) => void this.choose(e, 'mode')}>
           ${!modes.includes(mode) ? html`<option value="" selected disabled>Off</option>` : ''}
           ${modes.map((x) => html`<option value=${x} ?selected=${x === mode}>${x.replaceAll('_', ' ')}</option>`)}
