@@ -166,6 +166,8 @@ export class MtMyplaceZonePower extends LitElement {
   @property() systemEntity = '';
   @property() myzoneEntity = '';
   @property() manualPreset = '';
+  /** Optional Home Assistant script entity called for zone shutdown. */
+  @property() zoneOffScript = '';
   @property({ type: Boolean }) showMasterSelector = false;
   @state() private busy = false;
   @state() private error = '';
@@ -181,9 +183,18 @@ export class MtMyplaceZonePower extends LitElement {
     this.busy = true;
     this.error = '';
     try {
-      await this.hass.callService('climate', on ? 'turn_off' : 'turn_on', {
-        entity_id: this.entity,
-      });
+      if (on && this.zoneOffScript) {
+        // Script receives both entity and MyZone option; the installation
+        // decides whether and how to hand over before shutting down.
+        await this.hass.callService('script', 'turn_on', {
+          entity_id: this.zoneOffScript,
+          variables: { zone: this.masterOption || this.label, zone_entity: this.entity },
+        });
+      } else {
+        await this.hass.callService('climate', on ? 'turn_off' : 'turn_on', {
+          entity_id: this.entity,
+        });
+      }
     } catch (err) {
       this.error = err instanceof Error ? err.message : String(err);
     } finally {
