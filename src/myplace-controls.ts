@@ -175,6 +175,8 @@ export class MtMyplaceZonePower extends LitElement {
   @property() manualPreset = '';
   /** Optional Home Assistant script entity called for zone shutdown. */
   @property() zoneOffScript = '';
+  /** Optional HA script to bring up a zone and the central controller. */
+  @property() zoneOnScript = '';
   @property({ type: Boolean }) showMasterSelector = false;
   @state() private busy = false;
   @state() private error = '';
@@ -196,6 +198,11 @@ export class MtMyplaceZonePower extends LitElement {
         // Calling the script service directly waits for execution to finish,
         // keeping the button busy throughout the MyZone handover.
         await this.hass.callService('script', this.zoneOffScript.slice('script.'.length), {
+          zone: this.masterOption || this.label,
+          zone_entity: this.entity,
+        });
+      } else if (!on && this.zoneOnScript) {
+        await this.hass.callService('script', this.zoneOnScript.slice('script.'.length), {
           zone: this.masterOption || this.label,
           zone_entity: this.entity,
         });
