@@ -15,7 +15,7 @@ export const MYPLACE_ZONE_NAMES: Record<string, string> = {
  */
 export async function myplaceScript(
   hass: HomeAssistant,
-  service: 'ducted_ac_control' | 'ducted_ac_zone_on' | 'ducted_ac_zone_off',
+  service: 'ducted_ac_control',
   data: Record<string, string>,
 ): Promise<void> {
   await hass.callService('script', service, data);
@@ -59,6 +59,9 @@ const controlStyles = css`
   .icon-controls { grid-column: 1 / -1; }
   @container (max-width: 350px) { .choice-row { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
   .myzone { grid-column: 1 / -1; font-size: 12px; opacity: .8; }
+  .preset-warning { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; }
+  .manual-button { min-height: 40px; border-radius: 9px; padding: 7px 12px; border: 1px solid var(--primary-color); color: var(--primary-text-color); background: transparent; cursor: pointer; }
+  .manual-button:disabled { opacity: .5; }
   .error { grid-column: 1 / -1; color: var(--error-color, #cf6679); font-size: 12px; }
 `;
 
@@ -86,6 +89,25 @@ export class MtMyplaceSystemControls extends LitElement {
     this.error = '';
     try {
       await myplaceScript(this.hass, 'ducted_ac_control', { operation, value });
+    } catch (err) {
+      this.error = err instanceof Error ? err.message : String(err);
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  /** Manual mode is user-selected, never silently forced on state refresh. */
+  private async selectManualPreset(): Promise<void> {
+    if (this.busy) return;
+    const system = this.hass?.states[this.entity];
+    if (!((system?.attributes.preset_modes as string[] | undefined) ?? []).includes('MyZone')) return;
+    this.busy = true;
+    this.error = '';
+    try {
+      await this.hass.callService('climate', 'set_preset_mode', {
+        entity_id: this.entity,
+        preset_mode: 'MyZone',
+      });
     } catch (err) {
       this.error = err instanceof Error ? err.message : String(err);
     } finally {
@@ -132,6 +154,9 @@ export class MtMyplaceSystemControls extends LitElement {
       .filter((x) => ['cool', 'heat', 'dry', 'fan_only'].includes(x));
     const fans = (state?.attributes.fan_modes as string[] | undefined) ?? [];
     const myzone = this.hass?.states[this.myzoneEntity]?.state;
+    const preset = state?.attributes.preset_mode;
+    const manual = preset === 'MyZone';
+    const supportsManual = ((state?.attributes.preset_modes as string[] | undefined) ?? []).includes('MyZone');
     const unavailable = !state || mode === 'unavailable' || mode === 'unknown';
     return html`<div class="controls">
       <div class="heading">Ducted AC <span class="status">${mode || 'Unavailable'}</span></div>
@@ -139,6 +164,10 @@ export class MtMyplaceSystemControls extends LitElement {
         unavailable || this.busy || mode === 'off' || modes.length === 0)}
       ${this.renderSelector('fan', this.fanDisplay, fans, fan,
         unavailable || this.busy || mode === 'off' || fans.length === 0)}
+      ${!manual ? html`<div class="preset-warning">MyZone is not in Manual mode.
+        <button type="button" class="manual-button" ?disabled=${!supportsManual || this.busy}
+          @click=${() => void this.selectManualPreset()}>Use Manual MyZone</button>
+      </div>` : ''}
       ${myzone && !['unknown','unavailable'].includes(myzone)
         ? html`<div class="myzone">MyZone: ${myzone}</div>` : ''}
       ${this.error ? html`<div role="alert" class="error">${this.error}</div>` : ''}
