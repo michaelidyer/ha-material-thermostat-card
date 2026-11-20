@@ -58,7 +58,7 @@ describe('MyPlace controls', () => {
     el.label = 'Guest';
     el.hass = makeHass({
       'climate.ac_guest': climateState({}, 'cool'),
-      'climate.ac': climateState({}, 'dry'),
+      'climate.ac': climateState({ preset_mode: 'MyZone' }, 'dry'),
       'select.ac_myzone': entityState('select.ac_myzone', 'Guest'),
     });
     document.body.appendChild(el);
@@ -70,8 +70,8 @@ describe('MyPlace controls', () => {
       expect(el.shadowRoot!.textContent).to.contain('MyZone');
       button.click();
       await el.updateComplete;
-      expect(el.hass.__calls[0].service).to.equal('ducted_ac_zone_off');
-      expect(el.hass.__calls[0].data).to.deep.equal({ zone: 'Guest' });
+      expect(el.hass.__calls).to.have.length(0);
+      expect(el.shadowRoot!.textContent).to.contain('Select another master zone');
     } finally {
       el.remove();
     }
@@ -119,7 +119,8 @@ describe('MyPlace controls', () => {
     el.scriptZone = 'Guest';
     el.label = 'Guest';
     el.hass = makeHass({
-      'climate.ac_guest': climateState({}, 'cool'),
+      'climate.ac_guest': climateState({}, 'heat_cool'),
+      'climate.ac': climateState({ preset_mode: 'MyZone' }, 'cool'),
       'select.ac_myzone': entityState('select.ac_myzone', 'Master', {options: ['Guest', 'Master']}),
     });
     document.body.appendChild(el);
@@ -135,7 +136,8 @@ describe('MyPlace controls', () => {
         data: {entity_id: 'select.ac_myzone', option: 'Guest'}, target: undefined,
       });
       el.hass = makeHass({
-        'climate.ac_guest': climateState({}, 'cool'),
+        'climate.ac_guest': climateState({}, 'heat_cool'),
+        'climate.ac': climateState({ preset_mode: 'MyZone' }, 'cool'),
         'select.ac_myzone': entityState('select.ac_myzone', 'Guest', {options: ['Guest', 'Master']}),
       });
       await el.updateComplete;
@@ -152,6 +154,7 @@ describe('MyPlace controls', () => {
     el.scriptZone = 'Guest';
     el.hass = makeHass({
       'climate.ac_guest': climateState({}, 'off'),
+      'climate.ac': climateState({ preset_mode: 'MyZone' }, 'cool'),
       'select.ac_myzone': entityState('select.ac_myzone', 'Master', {options: ['Guest', 'Master']}),
     });
     document.body.appendChild(el);
@@ -159,11 +162,60 @@ describe('MyPlace controls', () => {
       await el.updateComplete;
       expect((el.shadowRoot!.querySelector('button.master') as HTMLButtonElement).disabled).to.equal(true);
       el.hass = makeHass({
-        'climate.ac_guest': climateState({}, 'cool'),
+        'climate.ac_guest': climateState({}, 'heat_cool'),
+        'climate.ac': climateState({ preset_mode: 'MyZone' }, 'cool'),
         'select.ac_myzone': entityState('select.ac_myzone', 'Master', {options: ['Master']}),
       });
       await el.updateComplete;
       expect((el.shadowRoot!.querySelector('button.master') as HTMLButtonElement).disabled).to.equal(true);
+    } finally { el.remove(); }
+  });
+
+  it('switches zones directly without calling handover scripts', async () => {
+    const el = document.createElement('mt-myplace-zone-power');
+    el.entity = 'climate.ac_guest';
+    el.scriptZone = 'Guest';
+    el.hass = makeHass({
+      'climate.ac_guest': climateState({}, 'heat_cool'),
+      'climate.ac': climateState({ preset_mode: 'MyZone' }, 'cool'),
+      'select.ac_myzone': entityState('select.ac_myzone', 'Master', {options: ['Guest', 'Master']}),
+    });
+    document.body.appendChild(el);
+    try {
+      await el.updateComplete;
+      (el.shadowRoot!.querySelector('button') as HTMLButtonElement).click();
+      await el.updateComplete;
+      expect(el.hass.__calls[0]).to.deep.equal({
+        domain: 'climate', service: 'turn_off',
+        data: { entity_id: 'climate.ac_guest' }, target: undefined,
+      });
+      el.hass = makeHass({
+        'climate.ac_guest': climateState({}, 'off'),
+        'climate.ac': climateState({ preset_mode: 'MyZone' }, 'cool'),
+        'select.ac_myzone': entityState('select.ac_myzone', 'Master', {options: ['Guest', 'Master']}),
+      });
+      await el.updateComplete;
+      (el.shadowRoot!.querySelector('button') as HTMLButtonElement).click();
+      await el.updateComplete;
+      expect(el.hass.__calls[0].service).to.equal('turn_on');
+    } finally { el.remove(); }
+  });
+
+  it('does not allow manual controls while preset is MyTemp or MyAuto', async () => {
+    const el = document.createElement('mt-myplace-zone-power');
+    el.entity = 'climate.ac_guest';
+    el.scriptZone = 'Guest';
+    el.showMasterSelector = true;
+    el.hass = makeHass({
+      'climate.ac_guest': climateState({}, 'heat_cool'),
+      'climate.ac': climateState({ preset_mode: 'MyTemp' }, 'cool'),
+      'select.ac_myzone': entityState('select.ac_myzone', 'Master', {options: ['Guest', 'Master']}),
+    });
+    document.body.appendChild(el);
+    try {
+      await el.updateComplete;
+      expect((el.shadowRoot!.querySelector('button.master') as HTMLButtonElement).disabled).to.equal(true);
+      expect((el.shadowRoot!.querySelector('button:not(.master)') as HTMLButtonElement).disabled).to.equal(true);
     } finally { el.remove(); }
   });
 
