@@ -186,9 +186,11 @@ export class MtMyplaceZonePower extends LitElement {
       if (on && this.zoneOffScript) {
         // Script receives both entity and MyZone option; the installation
         // decides whether and how to hand over before shutting down.
-        await this.hass.callService('script', 'turn_on', {
-          entity_id: this.zoneOffScript,
-          variables: { zone: this.masterOption || this.label, zone_entity: this.entity },
+        // Calling the script service directly waits for execution to finish,
+        // keeping the button busy throughout the MyZone handover.
+        await this.hass.callService('script', this.zoneOffScript.slice('script.'.length), {
+          zone: this.masterOption || this.label,
+          zone_entity: this.entity,
         });
       } else {
         await this.hass.callService('climate', on ? 'turn_off' : 'turn_on', {
