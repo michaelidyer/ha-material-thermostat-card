@@ -2,25 +2,6 @@ import { LitElement, css, html } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { HomeAssistant } from 'custom-card-helpers';
 
-export const MYPLACE_ZONE_NAMES: Record<string, string> = {
-  'climate.ac_guest': 'Guest',
-  'climate.ac_master': 'Master',
-  'climate.ac_mike_s_den': "Mike's Den",
-  'climate.ac_will_s_music': "Will's Music",
-};
-
-/**
- * These functions intentionally call existing HA scripts, not native climate
- * services. Zone handover and last-zone logic remain in the proven scripts.
- */
-export async function myplaceScript(
-  hass: HomeAssistant,
-  service: 'ducted_ac_control',
-  data: Record<string, string>,
-): Promise<void> {
-  await hass.callService('script', service, data);
-}
-
 export function isZoneActive(state?: string): boolean {
   return state !== undefined && !['off', 'unavailable', 'unknown'].includes(state);
 }
@@ -68,8 +49,9 @@ const controlStyles = css`
 @customElement('mt-myplace-system-controls')
 export class MtMyplaceSystemControls extends LitElement {
   @property({ attribute: false }) hass!: HomeAssistant;
-  @property() entity = 'climate.ac';
-  @property() myzoneEntity = 'select.ac_myzone';
+  @property() entity = '';
+  @property() myzoneEntity = '';
+  @property() manualPreset = '';
   @property() modeDisplay: SelectorDisplay = 'dropdown';
   @property() fanDisplay: SelectorDisplay = 'dropdown';
   @state() private busy = false;
@@ -82,13 +64,13 @@ export class MtMyplaceSystemControls extends LitElement {
     const allowed = operation === 'mode'
       ? (system?.attributes.hvac_modes as string[] | undefined) ?? []
       : (system?.attributes.fan_modes as string[] | undefined) ?? [];
-    // The existing control script has no verified 'off' operation.
-    if (!allowed.includes(value) ||
-        (operation === 'mode' && !['cool', 'heat', 'dry', 'fan_only'].includes(value))) return;
+    if (!allowed.includes(value)) return;
     this.busy = true;
     this.error = '';
     try {
-      await myplaceScript(this.hass, 'ducted_ac_control', { operation, value });
+      await this.hass.callService('climate', operation === 'mode' ? 'set_hvac_mode' : 'set_fan_mode',
+        operation === 'mode' ? { entity_id: this.entity, hvac_mode: value }
+          : { entity_id: this.entity, fan_mode: value });
     } catch (err) {
       this.error = err instanceof Error ? err.message : String(err);
     } finally {
@@ -100,13 +82,13 @@ export class MtMyplaceSystemControls extends LitElement {
   private async selectManualPreset(): Promise<void> {
     if (this.busy) return;
     const system = this.hass?.states[this.entity];
-    if (!((system?.attributes.preset_modes as string[] | undefined) ?? []).includes('MyZone')) return;
+    if (!this.manualPreset || !((system?.attributes.preset_modes as string[] | undefined) ?? []).includes(this.manualPreset)) return;
     this.busy = true;
     this.error = '';
     try {
       await this.hass.callService('climate', 'set_preset_mode', {
         entity_id: this.entity,
-        preset_mode: 'MyZone',
+        preset_mode: this.manualPreset,
       });
     } catch (err) {
       this.error = err instanceof Error ? err.message : String(err);
@@ -150,13 +132,12 @@ export class MtMyplaceSystemControls extends LitElement {
     const state = this.hass?.states[this.entity];
     const mode = state?.state ?? '';
     const fan = String(state?.attributes.fan_mode ?? '');
-    const modes = ((state?.attributes.hvac_modes as string[] | undefined) ?? [])
-      .filter((x) => ['cool', 'heat', 'dry', 'fan_only'].includes(x));
+    const modes = ((state?.attributes.hvac_modes as string[] | undefined) ?? []).filter((x) => x !== 'off');
     const fans = (state?.attributes.fan_modes as string[] | undefined) ?? [];
-    const myzone = this.hass?.states[this.myzoneEntity]?.state;
+    const myzone = this.myzoneEntity ? this.hass?.states[this.myzoneEntity]?.state : undefined;
     const preset = state?.attributes.preset_mode;
-    const manual = preset === 'MyZone';
-    const supportsManual = ((state?.attributes.preset_modes as string[] | undefined) ?? []).includes('MyZone');
+    const manual = !this.manualPreset || preset === this.manualPreset;
+    const supportsManual = !!this.manualPreset && ((state?.attributes.preset_modes as string[] | undefined) ?? []).includes(this.manualPreset);
     const unavailable = !state || mode === 'unavailable' || mode === 'unknown';
     return html`<div class="controls">
       <div class="heading">Ducted AC <span class="status">${mode || 'Unavailable'}</span></div>
@@ -164,11 +145,11 @@ export class MtMyplaceSystemControls extends LitElement {
         unavailable || this.busy || mode === 'off' || modes.length === 0)}
       ${this.renderSelector('fan', this.fanDisplay, fans, fan,
         unavailable || this.busy || mode === 'off' || fans.length === 0)}
-      ${!manual ? html`<div class="preset-warning">MyZone is not in Manual mode.
+      ${!manual ? html`<div class="preset-warning">Controller is not in ${this.manualPreset} mode.
         <button type="button" class="manual-button" ?disabled=${!supportsManual || this.busy}
-          @click=${() => void this.selectManualPreset()}>Use Manual MyZone</button>
+          @click=${() => void this.selectManualPreset()}>Use ${this.manualPreset}</button>
       </div>` : ''}
-      ${myzone && !['unknown','unavailable'].includes(myzone)
+      ${this.myzoneEntity && myzone && !['unknown','unavailable'].includes(myzone)
         ? html`<div class="myzone">MyZone: ${myzone}</div>` : ''}
       ${this.error ? html`<div role="alert" class="error">${this.error}</div>` : ''}
     </div>`;
@@ -180,10 +161,11 @@ export class MtMyplaceSystemControls extends LitElement {
 export class MtMyplaceZonePower extends LitElement {
   @property({ attribute: false }) hass!: HomeAssistant;
   @property() entity = '';
-  @property() scriptZone = '';
+  @property() masterOption = '';
   @property() label = '';
-  @property() systemEntity = 'climate.ac';
-  @property() myzoneEntity = 'select.ac_myzone';
+  @property() systemEntity = '';
+  @property() myzoneEntity = '';
+  @property() manualPreset = '';
   @property({ type: Boolean }) showMasterSelector = false;
   @state() private busy = false;
   @state() private error = '';
@@ -191,8 +173,8 @@ export class MtMyplaceZonePower extends LitElement {
   private async toggle(): Promise<void> {
     const state = this.hass?.states[this.entity]?.state;
     const preset = this.hass?.states[this.systemEntity]?.attributes.preset_mode;
-    if (this.busy || !this.scriptZone || state === undefined ||
-        ['unknown', 'unavailable'].includes(state) || preset !== 'MyZone') return;
+    if (this.busy || !this.entity || state === undefined ||
+        ['unknown', 'unavailable'].includes(state) || (this.manualPreset && preset !== this.manualPreset)) return;
     const on = isZoneActive(state);
     // MyPlace firmware owns any automatic master reassignment on zone closure.
     // Do not duplicate, pre-empt or prevent that behaviour in the card.
@@ -211,13 +193,13 @@ export class MtMyplaceZonePower extends LitElement {
 
   private async selectMaster(): Promise<void> {
     const zoneState = this.hass?.states[this.entity]?.state;
-    const selected = this.hass?.states[this.myzoneEntity];
+    const selected = this.myzoneEntity ? this.hass?.states[this.myzoneEntity] : undefined;
     const preset = this.hass?.states[this.systemEntity]?.attributes.preset_mode;
     const options = (selected?.attributes.options as string[] | undefined) ?? [];
-    const option = options.find((name) => name.toLowerCase() === this.scriptZone.toLowerCase());
+    const option = options.find((name) => name.toLowerCase() === this.masterOption.toLowerCase());
     // Only enabled zones present in the select's authoritative options may
     // become MyZone. No guesses about exact option labels.
-    if (this.busy || preset !== 'MyZone' || !isZoneActive(zoneState) || !option || !selected ||
+    if (this.busy || (this.manualPreset && preset !== this.manualPreset) || !isZoneActive(zoneState) || !option || !selected ||
         selected.state === 'unknown' || selected.state === 'unavailable' ||
         selected.state.toLowerCase() === option.toLowerCase()) return;
     this.busy = true;
@@ -238,15 +220,15 @@ export class MtMyplaceZonePower extends LitElement {
     const on = isZoneActive(state);
     const unknown = state === undefined || state === 'unknown' || state === 'unavailable';
     const dry = this.hass?.states[this.systemEntity]?.state === 'dry' && on;
-    const selected = this.hass?.states[this.myzoneEntity]?.state;
-    const manual = this.hass?.states[this.systemEntity]?.attributes.preset_mode === 'MyZone';
-    const mine = selected?.toLowerCase() === this.scriptZone.toLowerCase();
-    const availableOptions = (this.hass?.states[this.myzoneEntity]?.attributes.options as string[] | undefined) ?? [];
-    const canSelectMaster = manual && on && !unknown && availableOptions.some((name) => name.toLowerCase() === this.scriptZone.toLowerCase()) &&
+    const selected = this.myzoneEntity ? this.hass?.states[this.myzoneEntity]?.state : undefined;
+    const manual = !this.manualPreset || this.hass?.states[this.systemEntity]?.attributes.preset_mode === this.manualPreset;
+    const mine = !!this.masterOption && selected?.toLowerCase() === this.masterOption.toLowerCase();
+    const availableOptions = (this.myzoneEntity ? this.hass?.states[this.myzoneEntity]?.attributes.options as string[] | undefined : undefined) ?? [];
+    const canSelectMaster = manual && on && !unknown && !!this.masterOption && availableOptions.some((name) => name.toLowerCase() === this.masterOption.toLowerCase()) &&
       selected !== 'unavailable' && selected !== 'unknown';
     return html`<div class="zone">
-      <button type="button" aria-label=${`${on ? 'Turn off' : 'Turn on'} ${this.label || this.scriptZone}`}
-        aria-pressed=${String(on)} ?disabled=${unknown || !manual || this.busy || !this.scriptZone}
+      <button type="button" aria-label=${`${on ? 'Turn off' : 'Turn on'} ${this.label || this.entity}`}
+        aria-pressed=${String(on)} ?disabled=${unknown || !manual || this.busy || !this.entity}
         @click=${() => void this.toggle()}><ha-icon icon="mdi:power"></ha-icon>${on ? 'On' : 'Off'}</button>
       ${this.showMasterSelector
         ? html`<button class="master" type="button" aria-label=${`Set ${this.label || this.scriptZone} as master zone`}
