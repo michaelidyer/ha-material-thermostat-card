@@ -116,7 +116,7 @@ describe('material-ducted-thermostat-card', () => {
 
   it('keeps active zone setpoint dials disabled during system Dry mode', async () => {
     card = document.createElement('material-ducted-thermostat-card') as MaterialDuctedThermostatCard;
-    card.setConfig({ type: 'custom:material-ducted-thermostat-card', zones, columns: 2 });
+    card.setConfig({ type: 'custom:material-ducted-thermostat-card', zones, columns: 2, system_entity: 'climate.ac' });
     card.hass = makeHass({
       'climate.ac': climateState({}, 'dry'),
       'climate.ac_guest': climateState({}, 'cool'),
