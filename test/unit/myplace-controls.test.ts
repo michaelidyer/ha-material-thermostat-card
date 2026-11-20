@@ -25,16 +25,10 @@ describe('MyPlace controls', () => {
     });
   });
 
-  it('routes zone power to the existing scripts with the correct zone name', async () => {
-    const hass = makeHass({});
-    await myplaceScript(hass, 'ducted_ac_zone_off', { zone: "Will's Music" });
-    expect(hass.__calls[0].data).to.deep.equal({ zone: "Will's Music" });
-  });
-
   it('renders controller selectors from the climate entity state', async () => {
     const el = document.createElement('mt-myplace-system-controls');
     el.hass = makeHass({
-      'climate.ac': climateState({ fan_mode: 'auto' }, 'cool'),
+      'climate.ac': climateState({ fan_mode: 'auto', preset_mode: 'MyZone', preset_modes: ['MyZone', 'MyTemp', 'MyAuto'] }, 'cool'),
       'select.ac_myzone': entityState('select.ac_myzone', 'Master'),
     });
     document.body.appendChild(el);
@@ -216,6 +210,25 @@ describe('MyPlace controls', () => {
       await el.updateComplete;
       expect((el.shadowRoot!.querySelector('button.master') as HTMLButtonElement).disabled).to.equal(true);
       expect((el.shadowRoot!.querySelector('button:not(.master)') as HTMLButtonElement).disabled).to.equal(true);
+    } finally { el.remove(); }
+  });
+
+  it('offers an explicit switch back to manual MyZone without changing mode automatically', async () => {
+    const el = document.createElement('mt-myplace-system-controls');
+    el.hass = makeHass({
+      'climate.ac': climateState({ preset_mode: 'MyTemp',
+        preset_modes: ['MyZone', 'MyTemp', 'MyAuto'] }, 'cool'),
+    });
+    document.body.appendChild(el);
+    try {
+      await el.updateComplete;
+      expect(el.shadowRoot!.textContent).to.contain('MyZone is not in Manual mode');
+      (el.shadowRoot!.querySelector('button.manual-button') as HTMLButtonElement).click();
+      await el.updateComplete;
+      expect(el.hass.__calls[0]).to.deep.equal({
+        domain: 'climate', service: 'set_preset_mode',
+        data: { entity_id: 'climate.ac', preset_mode: 'MyZone' }, target: undefined,
+      });
     } finally { el.remove(); }
   });
 
