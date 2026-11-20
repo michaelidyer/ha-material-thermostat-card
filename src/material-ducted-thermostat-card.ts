@@ -3,12 +3,15 @@ import { customElement, property, state } from 'lit/decorators.js';
 import type { HomeAssistant, LovelaceCard } from 'custom-card-helpers';
 import type { MaterialThermostatCard } from './material-thermostat-card';
 import type { MaterialThermostatCardConfig } from './types';
+import { MYPLACE_ZONE_NAMES, isZoneActive } from './myplace-controls';
 
 export const DUCTED_CARD_TYPE = 'material-ducted-thermostat-card';
 
 export interface DuctedZoneConfig {
   entity: string;
   name?: string;
+  /** Exact name accepted by the existing zone on/off HA scripts. */
+  script_zone?: string;
 }
 
 export interface DuctedGridCardConfig {
@@ -23,6 +26,8 @@ export interface DuctedGridCardConfig {
   dial_style?: 'halo' | 'minimal' | 'google';
   /** Maximum dial diameter in pixels; shrinks on narrow screens. */
   dial_size?: number;
+  system_entity?: string;
+  myzone_entity?: string;
 }
 
 /**
@@ -89,6 +94,10 @@ export class MaterialDuctedThermostatCard extends LitElement implements Lovelace
         (!Number.isFinite(config.dial_size) || config.dial_size < 140 || config.dial_size > 320)) {
       throw new Error('dial_size must be between 140 and 320 pixels');
     }
+    if (config.zones.some((zone) => zone.script_zone !== undefined &&
+        (typeof zone.script_zone !== 'string' || !zone.script_zone.trim()))) {
+      throw new Error('script_zone must be a non-empty string');
+    }
     this._config = {
       ...config,
       zones: config.zones.map((zone) => ({ ...zone })),
@@ -128,7 +137,14 @@ export class MaterialDuctedThermostatCard extends LitElement implements Lovelace
         ? 'clamp(160px, 23cqw, 260px)'
         : `${this._config!.dial_size}px`);
       child.hass = this.hass;
-      void child.updateComplete.then(() => this._styleCompactChild(child));
+      void child.updateComplete.then(() => {
+        this._styleCompactChild(child);
+        const systemState = this.hass?.states[this._config?.system_entity ?? 'climate.ac']?.state;
+        const zoneState = this.hass?.states[zone.entity]?.state;
+        const dial = child.shadowRoot?.querySelector('mt-circular-dial') as
+          (HTMLElement & { disabled: boolean }) | null;
+        if (dial) dial.disabled = systemState === 'dry' && isZoneActive(zoneState);
+      });
     });
   }
 
@@ -145,9 +161,24 @@ export class MaterialDuctedThermostatCard extends LitElement implements Lovelace
       : `repeat(${cols}, minmax(0, 1fr))`;
 
     return html`<ha-card style=${`max-width: ${panelWidth}px`}>
+      <mt-myplace-system-controls
+        .hass=${this.hass}
+        .entity=${this._config.system_entity ?? 'climate.ac'}
+        .myzoneEntity=${this._config.myzone_entity ?? 'select.ac_myzone'}
+      ></mt-myplace-system-controls>
       <div class="zones" style=${`grid-template-columns: ${columns}; gap: ${gap}px`}>
       ${this._config.zones.map((zone) => html`
-        <material-thermostat-card data-entity=${zone.entity}></material-thermostat-card>
+        <div class="zone">
+          <material-thermostat-card data-entity=${zone.entity}></material-thermostat-card>
+          <mt-myplace-zone-power
+            .hass=${this.hass}
+            .entity=${zone.entity}
+            .scriptZone=${zone.script_zone ?? MYPLACE_ZONE_NAMES[zone.entity] ?? ''}
+            .label=${zone.name ?? MYPLACE_ZONE_NAMES[zone.entity] ?? zone.entity}
+            .systemEntity=${this._config?.system_entity ?? 'climate.ac'}
+            .myzoneEntity=${this._config?.myzone_entity ?? 'select.ac_myzone'}
+          ></mt-myplace-zone-power>
+        </div>
       `)}
     </div>
     </ha-card>`;
@@ -158,6 +189,8 @@ export class MaterialDuctedThermostatCard extends LitElement implements Lovelace
     ha-card { padding: 16px; box-sizing: border-box; margin-inline: auto; width: 100%; }
     .zones { display: grid; align-items: start; min-width: 0; margin-inline: auto; }
     material-thermostat-card { display: block; min-width: 0; }
+    .zone { min-width: 0; display: grid; align-items: start; justify-items: stretch; }
+    mt-myplace-zone-power { justify-self: center; }
     @container (max-width: 560px) {
       .zones { grid-template-columns: minmax(0, 1fr) !important; }
     }
