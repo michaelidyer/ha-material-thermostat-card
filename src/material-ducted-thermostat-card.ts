@@ -30,6 +30,8 @@ export interface DuctedGridCardConfig {
   myzone_entity?: string;
   /** Optional script entity used for safe zone shutdown/handover. */
   zone_off_script?: string;
+  /** Optional script for activating zones, including system startup. */
+  zone_on_script?: string;
   /** Optional script for system mode/fan (retains site-specific dump zone rules). */
   control_script?: string;
   /** Optional controller preset required for manual zone controls. */
@@ -127,12 +129,16 @@ export class MaterialDuctedThermostatCard extends LitElement implements Lovelace
         (typeof config.control_script !== 'string' || !config.control_script.startsWith('script.'))) {
       throw new Error('control_script must reference script.*');
     }
+    if (config.zone_on_script !== undefined &&
+        (typeof config.zone_on_script !== 'string' || !config.zone_on_script.startsWith('script.'))) {
+      throw new Error('zone_on_script must reference script.*');
+    }
     if (config.zone_off_script !== undefined &&
         (typeof config.zone_off_script !== 'string' || !config.zone_off_script.startsWith('script.'))) {
       throw new Error('zone_off_script must reference script.*');
     }
-    if (config.zone_off_script && config.zones.some((zone) => !zone.master_option)) {
-      throw new Error('Every zone needs master_option when zone_off_script is configured');
+    if ((config.zone_off_script || config.zone_on_script) && config.zones.some((zone) => !zone.master_option)) {
+      throw new Error('Every zone needs master_option when a zone script is configured');
     }
     if (config.manual_preset !== undefined && !config.manual_preset.trim()) {
       throw new Error('manual_preset must be non-empty');
@@ -225,6 +231,7 @@ export class MaterialDuctedThermostatCard extends LitElement implements Lovelace
             .myzoneEntity=${this._config?.myzone_entity ?? ''}
             .manualPreset=${this._config?.manual_preset ?? ''}
             .zoneOffScript=${this._config?.zone_off_script ?? ''}
+            .zoneOnScript=${this._config?.zone_on_script ?? ''}
             .showMasterSelector=${this._config?.show_master_selector ?? false}
           ></mt-myplace-zone-power>
         </div>
