@@ -235,6 +235,42 @@ describe('MyPlace controls', () => {
     } finally { el.remove(); }
   });
 
+  it('uses the configured zone-off script and leaves zone-on as native climate', async () => {
+    const el = document.createElement('mt-myplace-zone-power');
+    el.systemEntity = 'climate.ac';
+    el.myzoneEntity = 'select.ac_myzone';
+    el.manualPreset = 'MyZone';
+    el.entity = 'climate.ac_guest';
+    el.masterOption = 'Guest';
+    el.zoneOffScript = 'script.ducted_ac_zone_off';
+    el.hass = makeHass({
+      'climate.ac_guest': climateState({}, 'cool'),
+      'climate.ac': climateState({ preset_mode: 'MyZone' }, 'cool'),
+      'select.ac_myzone': entityState('select.ac_myzone', 'Guest'),
+    });
+    document.body.appendChild(el);
+    try {
+      await el.updateComplete;
+      (el.shadowRoot!.querySelector('button') as HTMLButtonElement).click();
+      await el.updateComplete;
+      expect(el.hass.__calls[0]).to.deep.equal({
+        domain: 'script', service: 'turn_on',
+        data: { entity_id: 'script.ducted_ac_zone_off',
+          variables: { zone: 'Guest', zone_entity: 'climate.ac_guest' } },
+        target: undefined,
+      });
+      el.hass = makeHass({
+        'climate.ac_guest': climateState({}, 'off'),
+        'climate.ac': climateState({ preset_mode: 'MyZone' }, 'cool'),
+      });
+      await el.updateComplete;
+      (el.shadowRoot!.querySelector('button') as HTMLButtonElement).click();
+      await el.updateComplete;
+      expect(el.hass.__calls[0].service).to.equal('turn_on');
+      expect(el.hass.__calls[0].domain).to.equal('climate');
+    } finally { el.remove(); }
+  });
+
   it('does not allow manual controls while preset is MyTemp or MyAuto', async () => {
     const el = document.createElement('mt-myplace-zone-power');
     el.systemEntity = 'climate.ac';
