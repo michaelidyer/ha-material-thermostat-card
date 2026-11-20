@@ -76,4 +76,95 @@ describe('MyPlace controls', () => {
       el.remove();
     }
   });
+  it('renders mode icon buttons and fan dropdown independently', async () => {
+    const el = document.createElement('mt-myplace-system-controls');
+    el.modeDisplay = 'icons';
+    el.fanDisplay = 'dropdown';
+    el.hass = makeHass({ 'climate.ac': climateState({ fan_mode: 'auto' }, 'cool') });
+    document.body.appendChild(el);
+    try {
+      await el.updateComplete;
+      const buttons = el.shadowRoot!.querySelectorAll('button.choice');
+      expect(buttons.length).to.equal(4);
+      expect(el.shadowRoot!.querySelectorAll('select')).to.have.length(1);
+      const cool = el.shadowRoot!.querySelector('button[aria-label="Mode: cool"]')!;
+      expect(cool.getAttribute('aria-pressed')).to.equal('true');
+      (el.shadowRoot!.querySelector('button[aria-label="Mode: heat"]') as HTMLButtonElement).click();
+      await el.updateComplete;
+      expect(el.hass.__calls[0].service).to.equal('ducted_ac_control');
+      expect(el.hass.__calls[0].data).to.deep.equal({operation: 'mode', value: 'heat'});
+    } finally { el.remove(); }
+  });
+
+  it('renders fan speed icon buttons using the same script command', async () => {
+    const el = document.createElement('mt-myplace-system-controls');
+    el.modeDisplay = 'dropdown';
+    el.fanDisplay = 'icons';
+    el.hass = makeHass({ 'climate.ac': climateState({ fan_mode: 'auto' }, 'cool') });
+    document.body.appendChild(el);
+    try {
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelectorAll('select')).to.have.length(1);
+      const high = el.shadowRoot!.querySelector('button[aria-label="Fan: high"]') as HTMLButtonElement;
+      high.click();
+      await el.updateComplete;
+      expect(el.hass.__calls[0].data).to.deep.equal({operation: 'fan', value: 'high'});
+    } finally { el.remove(); }
+  });
+
+  it('offers an optional crown to select an enabled zone as MyZone', async () => {
+    const el = document.createElement('mt-myplace-zone-power');
+    el.showMasterSelector = true;
+    el.entity = 'climate.ac_guest';
+    el.scriptZone = 'Guest';
+    el.label = 'Guest';
+    el.hass = makeHass({
+      'climate.ac_guest': climateState({}, 'cool'),
+      'select.ac_myzone': entityState('select.ac_myzone', 'Master', {options: ['Guest', 'Master']}),
+    });
+    document.body.appendChild(el);
+    try {
+      await el.updateComplete;
+      const crown = el.shadowRoot!.querySelector('button.master') as HTMLButtonElement;
+      expect(crown.disabled).to.equal(false);
+      expect(crown.getAttribute('aria-pressed')).to.equal('false');
+      crown.click();
+      await el.updateComplete;
+      expect(el.hass.__calls[0]).to.deep.equal({
+        domain: 'select', service: 'select_option',
+        data: {entity_id: 'select.ac_myzone', option: 'Guest'}, target: undefined,
+      });
+      el.hass = makeHass({
+        'climate.ac_guest': climateState({}, 'cool'),
+        'select.ac_myzone': entityState('select.ac_myzone', 'Guest', {options: ['Guest', 'Master']}),
+      });
+      await el.updateComplete;
+      const marked = el.shadowRoot!.querySelector('button.master') as HTMLButtonElement;
+      expect(marked.getAttribute('aria-pressed')).to.equal('true');
+      expect(marked.disabled).to.equal(true);
+    } finally { el.remove(); }
+  });
+
+  it('disables the MyZone selector when zone is off or not in controller options', async () => {
+    const el = document.createElement('mt-myplace-zone-power');
+    el.showMasterSelector = true;
+    el.entity = 'climate.ac_guest';
+    el.scriptZone = 'Guest';
+    el.hass = makeHass({
+      'climate.ac_guest': climateState({}, 'off'),
+      'select.ac_myzone': entityState('select.ac_myzone', 'Master', {options: ['Guest', 'Master']}),
+    });
+    document.body.appendChild(el);
+    try {
+      await el.updateComplete;
+      expect((el.shadowRoot!.querySelector('button.master') as HTMLButtonElement).disabled).to.equal(true);
+      el.hass = makeHass({
+        'climate.ac_guest': climateState({}, 'cool'),
+        'select.ac_myzone': entityState('select.ac_myzone', 'Master', {options: ['Master']}),
+      });
+      await el.updateComplete;
+      expect((el.shadowRoot!.querySelector('button.master') as HTMLButtonElement).disabled).to.equal(true);
+    } finally { el.remove(); }
+  });
+
 });
