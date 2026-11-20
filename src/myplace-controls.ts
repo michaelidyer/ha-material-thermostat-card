@@ -227,6 +227,7 @@ export class MtMyplaceZonePower extends LitElement {
     const canSelectMaster = manual && on && !unknown && !!this.masterOption && availableOptions.some((name) => name.toLowerCase() === this.masterOption.toLowerCase()) &&
       selected !== 'unavailable' && selected !== 'unknown';
     return html`<div class="zone">
+      <div class="zone-actions">
       <button type="button" aria-label=${`${on ? 'Turn off' : 'Turn on'} ${this.label || this.entity}`}
         aria-pressed=${String(on)} ?disabled=${unknown || !manual || this.busy || !this.entity}
         @click=${() => void this.toggle()}><ha-icon icon="mdi:power"></ha-icon>${on ? 'On' : 'Off'}</button>
@@ -239,6 +240,7 @@ export class MtMyplaceZonePower extends LitElement {
             <ha-icon icon="mdi:crown"></ha-icon>
           </button>`
         : mine ? html`<span class="myzone">MyZone</span>` : ''}
+      </div>
       ${dry ? html`<span class="dry">Setpoint disabled in Dry</span>` : ''}
       ${this.error ? html`<span class="error" role="alert">${this.error}</span>` : ''}
     </div>`;
@@ -246,6 +248,7 @@ export class MtMyplaceZonePower extends LitElement {
   static styles = css`
     :host { display: block; margin-top: 2px; }
     .zone { display: grid; justify-items: center; gap: 5px; }
+    .zone-actions { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; }
     button {
       border: 1px solid var(--divider-color, #7775); border-radius: 22px;
       background: transparent; color: var(--primary-text-color);
