@@ -205,7 +205,7 @@ export class MaterialDuctedThermostatCard extends LitElement implements Lovelace
             .entity=${zone.entity}
             .masterOption=${zone.master_option ?? ''}
             .label=${zone.name ?? zone.entity}
-            .systemEntity=${this._config?.system_entity ?? 'climate.ac'}
+            .systemEntity=${this._config?.system_entity ?? ''}
             .myzoneEntity=${this._config?.myzone_entity ?? ''}
             .manualPreset=${this._config?.manual_preset ?? ''}
             .showMasterSelector=${this._config?.show_master_selector ?? false}
