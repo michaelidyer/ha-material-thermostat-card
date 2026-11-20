@@ -30,6 +30,8 @@ export interface DuctedGridCardConfig {
   myzone_entity?: string;
   /** Optional script entity used for safe zone shutdown/handover. */
   zone_off_script?: string;
+  /** Optional script for system mode/fan (retains site-specific dump zone rules). */
+  control_script?: string;
   /** Optional controller preset required for manual zone controls. */
   manual_preset?: string;
   /** Shared mode and fan presentation (independently configurable). */
@@ -121,6 +123,10 @@ export class MaterialDuctedThermostatCard extends LitElement implements Lovelace
     if (config.myzone_entity !== undefined && !config.myzone_entity.startsWith('select.')) {
       throw new Error('myzone_entity must reference select.*');
     }
+    if (config.control_script !== undefined &&
+        (typeof config.control_script !== 'string' || !config.control_script.startsWith('script.'))) {
+      throw new Error('control_script must reference script.*');
+    }
     if (config.zone_off_script !== undefined &&
         (typeof config.zone_off_script !== 'string' || !config.zone_off_script.startsWith('script.'))) {
       throw new Error('zone_off_script must reference script.*');
@@ -202,6 +208,7 @@ export class MaterialDuctedThermostatCard extends LitElement implements Lovelace
         .entity=${this._config.system_entity ?? ''}
         .myzoneEntity=${this._config.myzone_entity ?? ''}
         .manualPreset=${this._config.manual_preset ?? ''}
+        .controlScript=${this._config.control_script ?? ''}
         .modeDisplay=${this._config.mode_display ?? 'dropdown'}
         .fanDisplay=${this._config.fan_display ?? 'dropdown'}
       ></mt-myplace-system-controls>` : ''}
