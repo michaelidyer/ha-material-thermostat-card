@@ -231,7 +231,7 @@ export class MtMyplaceZonePower extends LitElement {
         aria-pressed=${String(on)} ?disabled=${unknown || !manual || this.busy || !this.entity}
         @click=${() => void this.toggle()}><ha-icon icon="mdi:power"></ha-icon>${on ? 'On' : 'Off'}</button>
       ${this.showMasterSelector
-        ? html`<button class="master" type="button" aria-label=${`Set ${this.label || this.scriptZone} as master zone`}
+        ? html`<button class="master" type="button" aria-label=${`Set ${this.label || this.entity} as master zone`}
             title=${mine ? 'Current MyZone' : 'Make this zone MyZone'}
             aria-pressed=${String(mine)}
             ?disabled=${!canSelectMaster || this.busy || mine}
