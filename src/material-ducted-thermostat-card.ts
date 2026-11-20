@@ -28,6 +28,8 @@ export interface DuctedGridCardConfig {
   dial_size?: number;
   system_entity?: string;
   myzone_entity?: string;
+  /** Optional script entity used for safe zone shutdown/handover. */
+  zone_off_script?: string;
   /** Optional controller preset required for manual zone controls. */
   manual_preset?: string;
   /** Shared mode and fan presentation (independently configurable). */
@@ -119,6 +121,13 @@ export class MaterialDuctedThermostatCard extends LitElement implements Lovelace
     if (config.myzone_entity !== undefined && !config.myzone_entity.startsWith('select.')) {
       throw new Error('myzone_entity must reference select.*');
     }
+    if (config.zone_off_script !== undefined &&
+        (typeof config.zone_off_script !== 'string' || !config.zone_off_script.startsWith('script.'))) {
+      throw new Error('zone_off_script must reference script.*');
+    }
+    if (config.zone_off_script && config.zones.some((zone) => !zone.master_option)) {
+      throw new Error('Every zone needs master_option when zone_off_script is configured');
+    }
     if (config.manual_preset !== undefined && !config.manual_preset.trim()) {
       throw new Error('manual_preset must be non-empty');
     }
@@ -208,6 +217,7 @@ export class MaterialDuctedThermostatCard extends LitElement implements Lovelace
             .systemEntity=${this._config?.system_entity ?? ''}
             .myzoneEntity=${this._config?.myzone_entity ?? ''}
             .manualPreset=${this._config?.manual_preset ?? ''}
+            .zoneOffScript=${this._config?.zone_off_script ?? ''}
             .showMasterSelector=${this._config?.show_master_selector ?? false}
           ></mt-myplace-zone-power>
         </div>
