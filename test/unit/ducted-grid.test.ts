@@ -32,7 +32,7 @@ describe('material-ducted-thermostat-card', () => {
     document.body.appendChild(card);
     await card.updateComplete;
     const grid = card.shadowRoot!.querySelector('.zones') as HTMLElement;
-    expect(grid.style.gridTemplateColumns).to.equal('repeat(2, minmax(0, 1fr))');
+    expect(grid.style.gridTemplateColumns).to.equal('repeat(2, minmax(0px, 1fr))');
     const children = [...card.shadowRoot!.querySelectorAll('material-thermostat-card')] as any[];
     expect(children).to.have.length(4);
     expect(children.map((child) => child._config.entity)).to.deep.equal(zones.map((z) => z.entity));
@@ -47,7 +47,7 @@ describe('material-ducted-thermostat-card', () => {
     document.body.appendChild(card);
     await card.updateComplete;
     const grid = card.shadowRoot!.querySelector('.zones') as HTMLElement;
-    expect(grid.style.gridTemplateColumns).to.equal('repeat(1, minmax(0, 1fr))');
+    expect(grid.style.gridTemplateColumns).to.equal('repeat(1, minmax(0px, 1fr))');
     card.setConfig({ type: 'custom:material-ducted-thermostat-card', zones, columns: 'auto', min_zone_width: 210 });
     await card.updateComplete;
     expect(grid.style.gridTemplateColumns).to.contain('auto-fit');
