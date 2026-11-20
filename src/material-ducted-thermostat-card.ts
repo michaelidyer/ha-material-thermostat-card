@@ -3,12 +3,15 @@ import { customElement, property, state } from 'lit/decorators.js';
 import type { HomeAssistant, LovelaceCard } from 'custom-card-helpers';
 import type { MaterialThermostatCard } from './material-thermostat-card';
 import type { MaterialThermostatCardConfig } from './types';
+import { isZoneActive, type SelectorDisplay } from './myplace-controls';
 
 export const DUCTED_CARD_TYPE = 'material-ducted-thermostat-card';
 
 export interface DuctedZoneConfig {
   entity: string;
   name?: string;
+  /** Exact option label from the configured master select entity. */
+  master_option?: string;
 }
 
 export interface DuctedGridCardConfig {
@@ -23,6 +26,21 @@ export interface DuctedGridCardConfig {
   dial_style?: 'halo' | 'minimal' | 'google';
   /** Maximum dial diameter in pixels; shrinks on narrow screens. */
   dial_size?: number;
+  system_entity?: string;
+  myzone_entity?: string;
+  /** Optional script entity used for safe zone shutdown/handover. */
+  zone_off_script?: string;
+  /** Optional script for activating zones, including system startup. */
+  zone_on_script?: string;
+  /** Optional script for system mode/fan (retains site-specific dump zone rules). */
+  control_script?: string;
+  /** Optional controller preset required for manual zone controls. */
+  manual_preset?: string;
+  /** Shared mode and fan presentation (independently configurable). */
+  mode_display?: SelectorDisplay;
+  fan_display?: SelectorDisplay;
+  /** Show a per-zone crown button for selecting and indicating MyZone. */
+  show_master_selector?: boolean;
 }
 
 /**
@@ -30,8 +48,8 @@ export interface DuctedGridCardConfig {
  * Each instance retains its own temperature debounce, optimistic target and
  * service call binding, avoiding cross-zone setpoint contamination.
  *
- * This first milestone intentionally does NOT implement MyZone/zone power
- * commands. Existing climate.set_temperature behavior remains unchanged.
+ * Controller entities, manual preset and master option names come from dashboard
+ * YAML. The component does not embed installation-specific entity IDs.
  */
 @customElement('material-ducted-thermostat-card')
 export class MaterialDuctedThermostatCard extends LitElement implements LovelaceCard {
@@ -89,6 +107,45 @@ export class MaterialDuctedThermostatCard extends LitElement implements Lovelace
         (!Number.isFinite(config.dial_size) || config.dial_size < 140 || config.dial_size > 320)) {
       throw new Error('dial_size must be between 140 and 320 pixels');
     }
+    for (const display of [config.mode_display, config.fan_display]) {
+      if (display !== undefined && display !== 'icons' && display !== 'dropdown') {
+        throw new Error('mode_display and fan_display must be icons or dropdown');
+      }
+    }
+    if (config.show_master_selector !== undefined && typeof config.show_master_selector !== 'boolean') {
+      throw new Error('show_master_selector must be a boolean');
+    }
+    if (config.zones.some((zone) => zone.master_option !== undefined &&
+        (typeof zone.master_option !== 'string' || !zone.master_option.trim()))) {
+      throw new Error('master_option must be a non-empty string');
+    }
+    if (config.system_entity !== undefined && !config.system_entity.startsWith('climate.')) {
+      throw new Error('system_entity must reference climate.*');
+    }
+    if (config.myzone_entity !== undefined && !config.myzone_entity.startsWith('select.')) {
+      throw new Error('myzone_entity must reference select.*');
+    }
+    if (config.control_script !== undefined &&
+        (typeof config.control_script !== 'string' || !config.control_script.startsWith('script.'))) {
+      throw new Error('control_script must reference script.*');
+    }
+    if (config.zone_on_script !== undefined &&
+        (typeof config.zone_on_script !== 'string' || !config.zone_on_script.startsWith('script.'))) {
+      throw new Error('zone_on_script must reference script.*');
+    }
+    if (config.zone_off_script !== undefined &&
+        (typeof config.zone_off_script !== 'string' || !config.zone_off_script.startsWith('script.'))) {
+      throw new Error('zone_off_script must reference script.*');
+    }
+    if ((config.zone_off_script || config.zone_on_script) && config.zones.some((zone) => !zone.master_option)) {
+      throw new Error('Every zone needs master_option when a zone script is configured');
+    }
+    if (config.manual_preset !== undefined && !config.manual_preset.trim()) {
+      throw new Error('manual_preset must be non-empty');
+    }
+    if (config.show_master_selector && !config.myzone_entity) {
+      throw new Error('show_master_selector requires myzone_entity');
+    }
     this._config = {
       ...config,
       zones: config.zones.map((zone) => ({ ...zone })),
@@ -128,7 +185,14 @@ export class MaterialDuctedThermostatCard extends LitElement implements Lovelace
         ? 'clamp(160px, 23cqw, 260px)'
         : `${this._config!.dial_size}px`);
       child.hass = this.hass;
-      void child.updateComplete.then(() => this._styleCompactChild(child));
+      void child.updateComplete.then(() => {
+        this._styleCompactChild(child);
+        const systemState = this.hass?.states[this._config?.system_entity ?? '']?.state;
+        const zoneState = this.hass?.states[zone.entity]?.state;
+        const dial = child.shadowRoot?.querySelector('mt-circular-dial') as
+          (HTMLElement & { disabled: boolean }) | null;
+        if (dial) dial.disabled = systemState === 'dry' && isZoneActive(zoneState);
+      });
     });
   }
 
@@ -145,9 +209,32 @@ export class MaterialDuctedThermostatCard extends LitElement implements Lovelace
       : `repeat(${cols}, minmax(0, 1fr))`;
 
     return html`<ha-card style=${`max-width: ${panelWidth}px`}>
+      ${this._config.system_entity ? html`<mt-myplace-system-controls
+        .hass=${this.hass}
+        .entity=${this._config.system_entity ?? ''}
+        .myzoneEntity=${this._config.myzone_entity ?? ''}
+        .manualPreset=${this._config.manual_preset ?? ''}
+        .controlScript=${this._config.control_script ?? ''}
+        .modeDisplay=${this._config.mode_display ?? 'dropdown'}
+        .fanDisplay=${this._config.fan_display ?? 'dropdown'}
+      ></mt-myplace-system-controls>` : ''}
       <div class="zones" style=${`grid-template-columns: ${columns}; gap: ${gap}px`}>
       ${this._config.zones.map((zone) => html`
-        <material-thermostat-card data-entity=${zone.entity}></material-thermostat-card>
+        <div class="zone">
+          <material-thermostat-card data-entity=${zone.entity}></material-thermostat-card>
+          <mt-myplace-zone-power
+            .hass=${this.hass}
+            .entity=${zone.entity}
+            .masterOption=${zone.master_option ?? ''}
+            .label=${zone.name ?? zone.entity}
+            .systemEntity=${this._config?.system_entity ?? ''}
+            .myzoneEntity=${this._config?.myzone_entity ?? ''}
+            .manualPreset=${this._config?.manual_preset ?? ''}
+            .zoneOffScript=${this._config?.zone_off_script ?? ''}
+            .zoneOnScript=${this._config?.zone_on_script ?? ''}
+            .showMasterSelector=${this._config?.show_master_selector ?? false}
+          ></mt-myplace-zone-power>
+        </div>
       `)}
     </div>
     </ha-card>`;
@@ -158,9 +245,10 @@ export class MaterialDuctedThermostatCard extends LitElement implements Lovelace
     ha-card { padding: 16px; box-sizing: border-box; margin-inline: auto; width: 100%; }
     .zones { display: grid; align-items: start; min-width: 0; margin-inline: auto; }
     material-thermostat-card { display: block; min-width: 0; }
-    @container (max-width: 560px) {
-      .zones { grid-template-columns: minmax(0, 1fr) !important; }
-    }
+    .zone { min-width: 0; display: grid; align-items: start; justify-items: stretch; }
+    mt-myplace-zone-power { justify-self: center; }
+    /* Respect the dashboard's explicit column count on mobile.
+       'auto' remains responsive through CSS grid auto-fit. */
   `;
 }
 
