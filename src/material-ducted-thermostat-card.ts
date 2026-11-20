@@ -3,15 +3,15 @@ import { customElement, property, state } from 'lit/decorators.js';
 import type { HomeAssistant, LovelaceCard } from 'custom-card-helpers';
 import type { MaterialThermostatCard } from './material-thermostat-card';
 import type { MaterialThermostatCardConfig } from './types';
-import { MYPLACE_ZONE_NAMES, isZoneActive, type SelectorDisplay } from './myplace-controls';
+import { isZoneActive, type SelectorDisplay } from './myplace-controls';
 
 export const DUCTED_CARD_TYPE = 'material-ducted-thermostat-card';
 
 export interface DuctedZoneConfig {
   entity: string;
   name?: string;
-  /** Exact name accepted by the existing zone on/off HA scripts. */
-  script_zone?: string;
+  /** Exact option label from the configured master select entity. */
+  master_option?: string;
 }
 
 export interface DuctedGridCardConfig {
@@ -28,6 +28,8 @@ export interface DuctedGridCardConfig {
   dial_size?: number;
   system_entity?: string;
   myzone_entity?: string;
+  /** Optional controller preset required for manual zone controls. */
+  manual_preset?: string;
   /** Shared mode and fan presentation (independently configurable). */
   mode_display?: SelectorDisplay;
   fan_display?: SelectorDisplay;
@@ -40,8 +42,8 @@ export interface DuctedGridCardConfig {
  * Each instance retains its own temperature debounce, optimistic target and
  * service call binding, avoiding cross-zone setpoint contamination.
  *
- * This first milestone intentionally does NOT implement MyZone/zone power
- * commands. Existing climate.set_temperature behavior remains unchanged.
+ * Controller entities, manual preset and master option names come from dashboard
+ * YAML. The component does not embed installation-specific entity IDs.
  */
 @customElement('material-ducted-thermostat-card')
 export class MaterialDuctedThermostatCard extends LitElement implements LovelaceCard {
@@ -107,9 +109,21 @@ export class MaterialDuctedThermostatCard extends LitElement implements Lovelace
     if (config.show_master_selector !== undefined && typeof config.show_master_selector !== 'boolean') {
       throw new Error('show_master_selector must be a boolean');
     }
-    if (config.zones.some((zone) => zone.script_zone !== undefined &&
-        (typeof zone.script_zone !== 'string' || !zone.script_zone.trim()))) {
-      throw new Error('script_zone must be a non-empty string');
+    if (config.zones.some((zone) => zone.master_option !== undefined &&
+        (typeof zone.master_option !== 'string' || !zone.master_option.trim()))) {
+      throw new Error('master_option must be a non-empty string');
+    }
+    if (config.system_entity !== undefined && !config.system_entity.startsWith('climate.')) {
+      throw new Error('system_entity must reference climate.*');
+    }
+    if (config.myzone_entity !== undefined && !config.myzone_entity.startsWith('select.')) {
+      throw new Error('myzone_entity must reference select.*');
+    }
+    if (config.manual_preset !== undefined && !config.manual_preset.trim()) {
+      throw new Error('manual_preset must be non-empty');
+    }
+    if (config.show_master_selector && !config.myzone_entity) {
+      throw new Error('show_master_selector requires myzone_entity');
     }
     this._config = {
       ...config,
@@ -152,7 +166,7 @@ export class MaterialDuctedThermostatCard extends LitElement implements Lovelace
       child.hass = this.hass;
       void child.updateComplete.then(() => {
         this._styleCompactChild(child);
-        const systemState = this.hass?.states[this._config?.system_entity ?? 'climate.ac']?.state;
+        const systemState = this.hass?.states[this._config?.system_entity ?? '']?.state;
         const zoneState = this.hass?.states[zone.entity]?.state;
         const dial = child.shadowRoot?.querySelector('mt-circular-dial') as
           (HTMLElement & { disabled: boolean }) | null;
@@ -174,13 +188,14 @@ export class MaterialDuctedThermostatCard extends LitElement implements Lovelace
       : `repeat(${cols}, minmax(0, 1fr))`;
 
     return html`<ha-card style=${`max-width: ${panelWidth}px`}>
-      <mt-myplace-system-controls
+      ${this._config.system_entity ? html`<mt-myplace-system-controls
         .hass=${this.hass}
-        .entity=${this._config.system_entity ?? 'climate.ac'}
-        .myzoneEntity=${this._config.myzone_entity ?? 'select.ac_myzone'}
+        .entity=${this._config.system_entity ?? ''}
+        .myzoneEntity=${this._config.myzone_entity ?? ''}
+        .manualPreset=${this._config.manual_preset ?? ''}
         .modeDisplay=${this._config.mode_display ?? 'dropdown'}
         .fanDisplay=${this._config.fan_display ?? 'dropdown'}
-      ></mt-myplace-system-controls>
+      ></mt-myplace-system-controls>` : ''}
       <div class="zones" style=${`grid-template-columns: ${columns}; gap: ${gap}px`}>
       ${this._config.zones.map((zone) => html`
         <div class="zone">
@@ -188,10 +203,11 @@ export class MaterialDuctedThermostatCard extends LitElement implements Lovelace
           <mt-myplace-zone-power
             .hass=${this.hass}
             .entity=${zone.entity}
-            .scriptZone=${zone.script_zone ?? MYPLACE_ZONE_NAMES[zone.entity] ?? ''}
-            .label=${zone.name ?? MYPLACE_ZONE_NAMES[zone.entity] ?? zone.entity}
+            .masterOption=${zone.master_option ?? ''}
+            .label=${zone.name ?? zone.entity}
             .systemEntity=${this._config?.system_entity ?? 'climate.ac'}
-            .myzoneEntity=${this._config?.myzone_entity ?? 'select.ac_myzone'}
+            .myzoneEntity=${this._config?.myzone_entity ?? ''}
+            .manualPreset=${this._config?.manual_preset ?? ''}
             .showMasterSelector=${this._config?.show_master_selector ?? false}
           ></mt-myplace-zone-power>
         </div>
