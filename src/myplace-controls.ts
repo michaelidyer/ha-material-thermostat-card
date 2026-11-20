@@ -25,6 +25,12 @@ export function isZoneActive(state?: string): boolean {
   return state !== undefined && !['off', 'unavailable', 'unknown'].includes(state);
 }
 
+export type SelectorDisplay = 'icons' | 'dropdown';
+
+const HVAC_ICONS: Record<string, string> = {
+  cool: 'mdi:snowflake', heat: 'mdi:fire', dry: 'mdi:water-percent', fan_only: 'mdi:fan',
+};
+
 const controlStyles = css`
   :host { display: block; }
   .controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; margin-bottom: 14px; }
@@ -39,6 +45,19 @@ const controlStyles = css`
     font: inherit; text-transform: capitalize;
   }
   select:disabled { opacity: .5; }
+  .choice-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(60px, 1fr)); gap: 6px; }
+  .choice { min-width: 0; min-height: 54px; display: flex; flex-direction: column;
+    justify-content: center; align-items: center; gap: 3px; padding: 6px 3px;
+    border: 1px solid var(--divider-color, #7775); border-radius: 12px;
+    color: var(--primary-text-color); background: transparent; cursor: pointer; font: inherit; }
+  .choice ha-icon { --mdc-icon-size: 22px; }
+  .choice span { font-size: 11px; text-transform: capitalize; }
+  .choice[aria-pressed="true"] { color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 15%, transparent);
+    border-color: var(--primary-color); }
+  .choice:disabled { opacity: .5; cursor: not-allowed; }
+  .icon-controls { grid-column: 1 / -1; }
+  @container (max-width: 350px) { .choice-row { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
   .myzone { grid-column: 1 / -1; font-size: 12px; opacity: .8; }
   .error { grid-column: 1 / -1; color: var(--error-color, #cf6679); font-size: 12px; }
 `;
@@ -48,13 +67,14 @@ export class MtMyplaceSystemControls extends LitElement {
   @property({ attribute: false }) hass!: HomeAssistant;
   @property() entity = 'climate.ac';
   @property() myzoneEntity = 'select.ac_myzone';
+  @property() modeDisplay: SelectorDisplay = 'dropdown';
+  @property() fanDisplay: SelectorDisplay = 'dropdown';
   @state() private busy = false;
   @state() private error = '';
 
-  private async choose(event: Event, operation: 'mode' | 'fan'): Promise<void> {
+  /** Both button and dropdown presentations use the same HA script path. */
+  private async chooseValue(value: string, operation: 'mode' | 'fan'): Promise<void> {
     if (this.busy) return;
-    const select = event.currentTarget as HTMLSelectElement;
-    const value = select.value;
     const system = this.hass?.states[this.entity];
     const allowed = operation === 'mode'
       ? (system?.attributes.hvac_modes as string[] | undefined) ?? []
@@ -73,6 +93,37 @@ export class MtMyplaceSystemControls extends LitElement {
     }
   }
 
+  private renderSelector(
+    operation: 'mode' | 'fan',
+    display: SelectorDisplay,
+    values: string[],
+    active: string,
+    disabled: boolean,
+  ) {
+    const title = operation === 'mode' ? 'Mode' : 'Fan';
+    const labelled = operation === 'mode' ? 'Ducted HVAC mode' : 'Ducted fan speed';
+    if (display === 'icons') {
+      return html`<div class="icon-controls" role="group" aria-label=${labelled}>
+        <label>${title}</label>
+        <div class="choice-row">${values.map((value) => html`
+          <button type="button" class="choice" aria-label=${`${title}: ${value.replaceAll('_', ' ')}`}
+            aria-pressed=${String(value === active)} ?disabled=${disabled}
+            @click=${() => void this.chooseValue(value, operation)}>
+            <ha-icon icon=${operation === 'mode' ? HVAC_ICONS[value] ?? 'mdi:thermostat' : 'mdi:fan'}></ha-icon>
+            <span>${value.replaceAll('_', ' ')}</span>
+          </button>`)}</div>
+      </div>`;
+    }
+    return html`<label>${title}
+      <select aria-label=${labelled} .value=${values.includes(active) ? active : ''}
+        ?disabled=${disabled}
+        @change=${(event: Event) => void this.chooseValue((event.currentTarget as HTMLSelectElement).value, operation)}>
+        ${!values.includes(active) ? html`<option value="" selected disabled>Off</option>` : ''}
+        ${values.map((value) => html`<option value=${value} ?selected=${value === active}>${value.replaceAll('_', ' ')}</option>`)}
+      </select>
+    </label>`;
+  }
+
   protected render() {
     const state = this.hass?.states[this.entity];
     const mode = state?.state ?? '';
@@ -84,21 +135,10 @@ export class MtMyplaceSystemControls extends LitElement {
     const unavailable = !state || mode === 'unavailable' || mode === 'unknown';
     return html`<div class="controls">
       <div class="heading">Ducted AC <span class="status">${mode || 'Unavailable'}</span></div>
-      <label>Mode
-        <select aria-label="Ducted HVAC mode" .value=${modes.includes(mode) ? mode : ''}
-          ?disabled=${unavailable || this.busy || mode === 'off' || modes.length === 0}
-          @change=${(e: Event) => void this.choose(e, 'mode')}>
-          ${!modes.includes(mode) ? html`<option value="" selected disabled>Off</option>` : ''}
-          ${modes.map((x) => html`<option value=${x} ?selected=${x === mode}>${x.replaceAll('_', ' ')}</option>`)}
-        </select>
-      </label>
-      <label>Fan
-        <select aria-label="Ducted fan speed" .value=${fan}
-          ?disabled=${unavailable || this.busy || mode === 'off' || fans.length === 0}
-          @change=${(e: Event) => void this.choose(e, 'fan')}>
-          ${fans.map((x) => html`<option value=${x} ?selected=${x === fan}>${x}</option>`)}
-        </select>
-      </label>
+      ${this.renderSelector('mode', this.modeDisplay, modes, mode,
+        unavailable || this.busy || mode === 'off' || modes.length === 0)}
+      ${this.renderSelector('fan', this.fanDisplay, fans, fan,
+        unavailable || this.busy || mode === 'off' || fans.length === 0)}
       ${myzone && !['unknown','unavailable'].includes(myzone)
         ? html`<div class="myzone">MyZone: ${myzone}</div>` : ''}
       ${this.error ? html`<div role="alert" class="error">${this.error}</div>` : ''}
