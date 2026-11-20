@@ -155,6 +155,7 @@ export class MtMyplaceZonePower extends LitElement {
   @property() label = '';
   @property() systemEntity = 'climate.ac';
   @property() myzoneEntity = 'select.ac_myzone';
+  @property({ type: Boolean }) showMasterSelector = false;
   @state() private busy = false;
   @state() private error = '';
 
@@ -174,6 +175,29 @@ export class MtMyplaceZonePower extends LitElement {
     }
   }
 
+  private async selectMaster(): Promise<void> {
+    const zoneState = this.hass?.states[this.entity]?.state;
+    const selected = this.hass?.states[this.myzoneEntity];
+    const options = (selected?.attributes.options as string[] | undefined) ?? [];
+    const option = options.find((name) => name.toLowerCase() === this.scriptZone.toLowerCase());
+    // Only enabled zones present in the select's authoritative options may
+    // become MyZone. No guesses about exact option labels.
+    if (this.busy || !isZoneActive(zoneState) || !option || !selected ||
+        selected.state === 'unknown' || selected.state === 'unavailable' ||
+        selected.state.toLowerCase() === option.toLowerCase()) return;
+    this.busy = true;
+    this.error = '';
+    try {
+      await this.hass.callService('select', 'select_option', {
+        entity_id: this.myzoneEntity, option,
+      });
+    } catch (err) {
+      this.error = err instanceof Error ? err.message : String(err);
+    } finally {
+      this.busy = false;
+    }
+  }
+
   protected render() {
     const state = this.hass?.states[this.entity]?.state;
     const on = isZoneActive(state);
@@ -181,11 +205,22 @@ export class MtMyplaceZonePower extends LitElement {
     const dry = this.hass?.states[this.systemEntity]?.state === 'dry' && on;
     const selected = this.hass?.states[this.myzoneEntity]?.state;
     const mine = selected?.toLowerCase() === this.scriptZone.toLowerCase();
+    const availableOptions = (this.hass?.states[this.myzoneEntity]?.attributes.options as string[] | undefined) ?? [];
+    const canSelectMaster = on && !unknown && availableOptions.some((name) => name.toLowerCase() === this.scriptZone.toLowerCase()) &&
+      selected !== 'unavailable' && selected !== 'unknown';
     return html`<div class="zone">
       <button type="button" aria-label=${`${on ? 'Turn off' : 'Turn on'} ${this.label || this.scriptZone}`}
         aria-pressed=${String(on)} ?disabled=${unknown || this.busy || !this.scriptZone}
         @click=${() => void this.toggle()}><ha-icon icon="mdi:power"></ha-icon>${on ? 'On' : 'Off'}</button>
-      ${mine ? html`<span class="myzone">MyZone</span>` : ''}
+      ${this.showMasterSelector
+        ? html`<button class="master" type="button" aria-label=${`Set ${this.label || this.scriptZone} as master zone`}
+            title=${mine ? 'Current MyZone' : 'Make this zone MyZone'}
+            aria-pressed=${String(mine)}
+            ?disabled=${!canSelectMaster || this.busy || mine}
+            @click=${() => void this.selectMaster()}>
+            <ha-icon icon="mdi:crown"></ha-icon>
+          </button>`
+        : mine ? html`<span class="myzone">MyZone</span>` : ''}
       ${dry ? html`<span class="dry">Setpoint disabled in Dry</span>` : ''}
       ${this.error ? html`<span class="error" role="alert">${this.error}</span>` : ''}
     </div>`;
@@ -204,6 +239,9 @@ export class MtMyplaceZonePower extends LitElement {
     button:disabled { opacity: .5; cursor: not-allowed; }
     ha-icon { --mdc-icon-size: 20px; }
     .myzone { color: var(--primary-color); font-size: 12px; }
+    .master { min-width: 44px; width: 44px; height: 44px; padding: 0; }
+    .master[aria-pressed="true"] { color: var(--primary-color); background: color-mix(in srgb, var(--primary-color) 20%, transparent); border-color: var(--primary-color); opacity: 1; }
+    .master[aria-pressed="true"] ha-icon { --mdc-icon-size: 22px; }
     .dry { font-size: 12px; opacity: .75; }
     .error { color: var(--error-color, #cf6679); font-size: 12px; }
   `;
