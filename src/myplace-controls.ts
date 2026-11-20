@@ -52,12 +52,14 @@ export class MtMyplaceSystemControls extends LitElement {
   @property() entity = '';
   @property() myzoneEntity = '';
   @property() manualPreset = '';
+  /** Optional script for controller mode/fan commands (e.g. dump-zone handling). */
+  @property() controlScript = '';
   @property() modeDisplay: SelectorDisplay = 'dropdown';
   @property() fanDisplay: SelectorDisplay = 'dropdown';
   @state() private busy = false;
   @state() private error = '';
 
-  /** Both button and dropdown presentations use the same HA script path. */
+  /** Both button and dropdown presentations use the same configurable service path. */
   private async chooseValue(value: string, operation: 'mode' | 'fan'): Promise<void> {
     if (this.busy) return;
     const system = this.hass?.states[this.entity];
@@ -68,9 +70,14 @@ export class MtMyplaceSystemControls extends LitElement {
     this.busy = true;
     this.error = '';
     try {
-      await this.hass.callService('climate', operation === 'mode' ? 'set_hvac_mode' : 'set_fan_mode',
-        operation === 'mode' ? { entity_id: this.entity, hvac_mode: value }
-          : { entity_id: this.entity, fan_mode: value });
+      if (this.controlScript) {
+        await this.hass.callService('script', this.controlScript.slice('script.'.length),
+          { operation, value });
+      } else {
+        await this.hass.callService('climate', operation === 'mode' ? 'set_hvac_mode' : 'set_fan_mode',
+          operation === 'mode' ? { entity_id: this.entity, hvac_mode: value }
+            : { entity_id: this.entity, fan_mode: value });
+      }
     } catch (err) {
       this.error = err instanceof Error ? err.message : String(err);
     } finally {
