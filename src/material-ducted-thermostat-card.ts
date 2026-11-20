@@ -21,6 +21,8 @@ export interface DuctedGridCardConfig {
   /** Space between thermostat cards, in pixels. */
   gap?: number;
   dial_style?: 'halo' | 'minimal' | 'google';
+  /** Maximum dial diameter in pixels; shrinks on narrow screens. */
+  dial_size?: number;
 }
 
 /**
@@ -36,6 +38,29 @@ export class MaterialDuctedThermostatCard extends LitElement implements Lovelace
   @property({ attribute: false }) hass!: HomeAssistant;
   @state() private _config?: DuctedGridCardConfig;
   private _applied = new WeakMap<MaterialThermostatCard, string>();
+
+  /**
+   * The original thermostat owns the climate commands. A scoped style removes
+   * individual card surfaces and bounds the dial without modifying upstream.
+   * This depends on the current Material Thermostat Card internal CSS classes.
+   */
+  private _styleCompactChild(child: MaterialThermostatCard): void {
+    const root = child.shadowRoot;
+    if (!root || root.querySelector('style[data-ducted-compact]')) return;
+    const style = document.createElement('style');
+    style.dataset.ductedCompact = '';
+    style.textContent = ":host { display: block; min-width: 0; }\nha-card { background: transparent !important; background-color: transparent !important; box-shadow: none !important; border: 0 !important; border-radius: 0 !important; padding: 0 !important; }\n.header { min-height: 40px !important; }\n.name { font-size: 17px !important; padding: 0 40px !important; }\n.more { width: 40px !important; height: 40px !important; }\n.body { margin-top: 0 !important; }\n.dial-wrap { width: min(100%, var(--ducted-dial-size, clamp(160px, 23cqw, 260px))) !important; margin-inline: auto !important; }\nmt-circular-dial { width: 100%; }";
+    root.appendChild(style);
+    // Keep the +/- targets usable when the responsive dial becomes small.
+    // These selectors are scoped to this embedded dial only.
+    const dial = root.querySelector<HTMLElement>('mt-circular-dial');
+    if (dial?.shadowRoot && !dial.shadowRoot.querySelector('style[data-ducted-targets]')) {
+      const targetStyle = document.createElement('style');
+      targetStyle.dataset.ductedTargets = '';
+      targetStyle.textContent = '.adjust { width: 48% !important; } .step { width: clamp(34px, 19cqi, 42px) !important; height: clamp(34px, 19cqi, 42px) !important; }';
+      dial.shadowRoot.appendChild(targetStyle);
+    }
+  }
 
   public setConfig(config: DuctedGridCardConfig): void {
     if (!Array.isArray(config.zones) || config.zones.length === 0) {
@@ -59,6 +84,10 @@ export class MaterialDuctedThermostatCard extends LitElement implements Lovelace
     }
     if (config.gap !== undefined && (!Number.isFinite(config.gap) || config.gap < 0 || config.gap > 64)) {
       throw new Error('gap must be between 0 and 64');
+    }
+    if (config.dial_size !== undefined &&
+        (!Number.isFinite(config.dial_size) || config.dial_size < 140 || config.dial_size > 320)) {
+      throw new Error('dial_size must be between 140 and 320 pixels');
     }
     this._config = {
       ...config,
@@ -95,7 +124,11 @@ export class MaterialDuctedThermostatCard extends LitElement implements Lovelace
         child.setConfig(childConfig);
         this._applied.set(child, signature);
       }
+      child.style.setProperty('--ducted-dial-size', this._config!.dial_size === undefined
+        ? 'clamp(160px, 23cqw, 260px)'
+        : `${this._config!.dial_size}px`);
       child.hass = this.hass;
+      void child.updateComplete.then(() => this._styleCompactChild(child));
     });
   }
 
@@ -104,21 +137,30 @@ export class MaterialDuctedThermostatCard extends LitElement implements Lovelace
     const cols = this._config.columns ?? 2;
     const minWidth = this._config.min_zone_width ?? 260;
     const gap = this._config.gap ?? 12;
+    const dialSize = this._config.dial_size ?? 260;
+    const cellWidth = dialSize + 24;
+    const panelWidth = cols === 'auto' ? 1024 : cellWidth * cols + gap * (cols - 1) + 32;
     const columns = cols === 'auto'
       ? `repeat(auto-fit, minmax(min(100%, ${minWidth}px), 1fr))`
       : `repeat(${cols}, minmax(0, 1fr))`;
 
-    return html`<div class="zones" style=${`grid-template-columns: ${columns}; gap: ${gap}px`}>
+    return html`<ha-card style=${`max-width: ${panelWidth}px`}>
+      <div class="zones" style=${`grid-template-columns: ${columns}; gap: ${gap}px`}>
       ${this._config.zones.map((zone) => html`
         <material-thermostat-card data-entity=${zone.entity}></material-thermostat-card>
       `)}
-    </div>`;
+    </div>
+    </ha-card>`;
   }
 
   static styles = css`
-    :host { display: block; }
-    .zones { display: grid; align-items: start; min-width: 0; }
+    :host { display: block; container-type: inline-size; }
+    ha-card { padding: 16px; box-sizing: border-box; margin-inline: auto; width: 100%; }
+    .zones { display: grid; align-items: start; min-width: 0; margin-inline: auto; }
     material-thermostat-card { display: block; min-width: 0; }
+    @container (max-width: 560px) {
+      .zones { grid-template-columns: minmax(0, 1fr) !important; }
+    }
   `;
 }
 

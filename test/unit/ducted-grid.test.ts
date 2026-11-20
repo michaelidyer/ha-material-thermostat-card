@@ -62,4 +62,56 @@ describe('material-ducted-thermostat-card', () => {
     await card.updateComplete;
     expect(grid.style.gridTemplateColumns).to.contain('auto-fit');
   });
+  it('uses a single parent surface and scales embedded dials without changing the original card', async () => {
+    card = document.createElement('material-ducted-thermostat-card') as MaterialDuctedThermostatCard;
+    card.setConfig({ type: 'custom:material-ducted-thermostat-card', zones, columns: 2, dial_size: 176 });
+    card.hass = makeHass(Object.fromEntries(zones.map((z) => [z.entity, {
+      ...climateState(), entity_id: z.entity,
+    }])));
+    document.body.appendChild(card);
+    await card.updateComplete;
+    expect(card.shadowRoot!.querySelectorAll('ha-card')).to.have.length(1);
+    const panel = card.shadowRoot!.querySelector('ha-card') as HTMLElement;
+    expect(panel.style.maxWidth).to.equal('444px');
+    const children = [...card.shadowRoot!.querySelectorAll('material-thermostat-card')] as any[];
+    await Promise.all(children.map((child) => child.updateComplete));
+    expect(children).to.have.length(4);
+    for (const child of children) {
+      expect(child.style.getPropertyValue('--ducted-dial-size')).to.equal('176px');
+      expect(child.shadowRoot.querySelectorAll('style[data-ducted-compact]')).to.have.length(1);
+      const dial = child.shadowRoot.querySelector('mt-circular-dial');
+      expect(dial.shadowRoot.querySelectorAll('style[data-ducted-targets]')).to.have.length(1);
+    }
+    // Repeat a hass update: style injection should remain idempotent.
+    card.hass = makeHass(card.hass.states);
+    await card.updateComplete;
+    await Promise.all(children.map((child) => child.updateComplete));
+    for (const child of children) {
+      expect(child.shadowRoot.querySelectorAll('style[data-ducted-compact]')).to.have.length(1);
+    }
+  });
+
+  it('rejects invalid dial sizes', () => {
+    const el = document.createElement('material-ducted-thermostat-card') as MaterialDuctedThermostatCard;
+    expect(() => el.setConfig({
+      type: 'custom:material-ducted-thermostat-card', zones, dial_size: 100,
+    })).to.throw('dial_size must be between');
+  });
+
+
+  it('defaults to responsive sizing and a bounded panel for fixed columns', async () => {
+    card = document.createElement('material-ducted-thermostat-card') as MaterialDuctedThermostatCard;
+    card.setConfig({ type: 'custom:material-ducted-thermostat-card', zones, columns: 2 });
+    card.hass = makeHass(Object.fromEntries(zones.map((z) => [z.entity, {
+      ...climateState(), entity_id: z.entity,
+    }])));
+    document.body.appendChild(card);
+    await card.updateComplete;
+    const panel = card.shadowRoot!.querySelector('ha-card') as HTMLElement;
+    expect(panel.style.maxWidth).to.equal('612px');
+    const children = [...card.shadowRoot!.querySelectorAll('material-thermostat-card')] as any[];
+    expect(children[0].style.getPropertyValue('--ducted-dial-size'))
+      .to.equal('clamp(160px, 23cqw, 260px)');
+  });
+
 });
