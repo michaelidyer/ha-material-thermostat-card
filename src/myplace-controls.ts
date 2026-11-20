@@ -191,16 +191,11 @@ export class MtMyplaceZonePower extends LitElement {
   private async toggle(): Promise<void> {
     const state = this.hass?.states[this.entity]?.state;
     const preset = this.hass?.states[this.systemEntity]?.attributes.preset_mode;
-    const myzone = this.hass?.states[this.myzoneEntity]?.state;
     if (this.busy || !this.scriptZone || state === undefined ||
         ['unknown', 'unavailable'].includes(state) || preset !== 'MyZone') return;
     const on = isZoneActive(state);
-    // Manual control: never hand MyZone to another room on the user's behalf.
-    // Select another crown first before switching off the controlling zone.
-    if (on && myzone?.toLowerCase() === this.scriptZone.toLowerCase()) {
-      this.error = 'Select another master zone before turning this one off';
-      return;
-    }
+    // MyPlace firmware owns any automatic master reassignment on zone closure.
+    // Do not duplicate, pre-empt or prevent that behaviour in the card.
     this.busy = true;
     this.error = '';
     try {
@@ -251,7 +246,7 @@ export class MtMyplaceZonePower extends LitElement {
       selected !== 'unavailable' && selected !== 'unknown';
     return html`<div class="zone">
       <button type="button" aria-label=${`${on ? 'Turn off' : 'Turn on'} ${this.label || this.scriptZone}`}
-        aria-pressed=${String(on)} ?disabled=${unknown || !manual || this.busy || !this.scriptZone || (on && mine)}
+        aria-pressed=${String(on)} ?disabled=${unknown || !manual || this.busy || !this.scriptZone}
         @click=${() => void this.toggle()}><ha-icon icon="mdi:power"></ha-icon>${on ? 'On' : 'Off'}</button>
       ${this.showMasterSelector
         ? html`<button class="master" type="button" aria-label=${`Set ${this.label || this.scriptZone} as master zone`}
