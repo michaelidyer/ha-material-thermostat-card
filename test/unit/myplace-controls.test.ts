@@ -99,7 +99,7 @@ describe('MyPlace controls', () => {
     try {
       await el.updateComplete;
       const buttons = el.shadowRoot!.querySelectorAll('button.choice');
-      expect(buttons.length).to.equal(4);
+      expect(buttons.length).to.equal(6);
       expect(el.shadowRoot!.querySelectorAll('select')).to.have.length(1);
       const cool = el.shadowRoot!.querySelector('button[aria-label="Mode: cool"]')!;
       expect(cool.getAttribute('aria-pressed')).to.equal('true');
