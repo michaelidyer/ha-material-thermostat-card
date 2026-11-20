@@ -45,7 +45,7 @@ describe('MyPlace controls', () => {
     }
   });
 
-  it('shows the Dry guard and active zone power state', async () => {
+  it('allows closing the current MyZone and leaves handover to MyPlace', async () => {
     const el = document.createElement('mt-myplace-zone-power');
     el.entity = 'climate.ac_guest';
     el.scriptZone = 'Guest';
@@ -64,8 +64,10 @@ describe('MyPlace controls', () => {
       expect(el.shadowRoot!.textContent).to.contain('MyZone');
       button.click();
       await el.updateComplete;
-      expect(el.hass.__calls).to.have.length(0);
-      expect(el.shadowRoot!.textContent).to.contain('Select another master zone');
+      expect(el.hass.__calls[0]).to.deep.equal({
+        domain: 'climate', service: 'turn_off',
+        data: { entity_id: 'climate.ac_guest' }, target: undefined,
+      });
     } finally {
       el.remove();
     }
