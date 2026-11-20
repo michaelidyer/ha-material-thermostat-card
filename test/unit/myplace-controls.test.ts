@@ -146,7 +146,11 @@ describe('MyPlace controls', () => {
     document.body.appendChild(el);
     try {
       await el.updateComplete;
-      const crown = el.shadowRoot!.querySelector('button.master') as HTMLButtonElement;
+      const actions = el.shadowRoot!.querySelector('.zone-actions') as HTMLElement;
+      expect(actions).to.exist;
+      expect(actions.querySelectorAll('button')).to.have.length(2);
+      expect(getComputedStyle(actions).display).to.equal('flex');
+      const crown = actions.querySelector('button.master') as HTMLButtonElement;
       expect(crown.disabled).to.equal(false);
       expect(crown.getAttribute('aria-pressed')).to.equal('false');
       crown.click();
