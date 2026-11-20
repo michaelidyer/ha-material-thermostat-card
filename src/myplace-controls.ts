@@ -248,7 +248,7 @@ export class MtMyplaceZonePower extends LitElement {
   static styles = css`
     :host { display: block; margin-top: 2px; }
     .zone { display: grid; justify-items: center; gap: 5px; }
-    .zone-actions { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; }
+    .zone-actions { display: grid; grid-template-columns: 100px 44px; grid-auto-flow: column; justify-content: center; align-items: center; column-gap: 8px; width: max-content; max-width: 100%; }
     button {
       border: 1px solid var(--divider-color, #7775); border-radius: 22px;
       background: transparent; color: var(--primary-text-color);
@@ -256,11 +256,12 @@ export class MtMyplaceZonePower extends LitElement {
       display: inline-flex; gap: 6px; justify-content: center; align-items: center;
       cursor: pointer; font: inherit;
     }
+    .zone-actions > button:not(.master) { width: 100px; min-width: 100px; box-sizing: border-box; }
     button[aria-pressed="true"] { background: color-mix(in srgb, var(--primary-color) 17%, transparent); }
     button:disabled { opacity: .5; cursor: not-allowed; }
     ha-icon { --mdc-icon-size: 20px; }
     .myzone { color: var(--primary-color); font-size: 12px; }
-    .master { min-width: 44px; width: 44px; height: 44px; padding: 0; }
+    .master { min-width: 44px; width: 44px; height: 44px; padding: 0; box-sizing: border-box; }
     .master[aria-pressed="true"] { color: var(--primary-color); background: color-mix(in srgb, var(--primary-color) 20%, transparent); border-color: var(--primary-color); opacity: 1; }
     .master[aria-pressed="true"] ha-icon { --mdc-icon-size: 22px; }
     .dry { font-size: 12px; opacity: .75; }
