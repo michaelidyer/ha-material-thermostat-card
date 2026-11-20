@@ -247,9 +247,8 @@ export class MaterialDuctedThermostatCard extends LitElement implements Lovelace
     material-thermostat-card { display: block; min-width: 0; }
     .zone { min-width: 0; display: grid; align-items: start; justify-items: stretch; }
     mt-myplace-zone-power { justify-self: center; }
-    @container (max-width: 560px) {
-      .zones { grid-template-columns: minmax(0, 1fr) !important; }
-    }
+    /* Respect the dashboard's explicit column count on mobile.
+       'auto' remains responsive through CSS grid auto-fit. */
   `;
 }
 
