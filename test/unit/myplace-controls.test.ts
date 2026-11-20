@@ -254,9 +254,8 @@ describe('MyPlace controls', () => {
       (el.shadowRoot!.querySelector('button') as HTMLButtonElement).click();
       await el.updateComplete;
       expect(el.hass.__calls[0]).to.deep.equal({
-        domain: 'script', service: 'turn_on',
-        data: { entity_id: 'script.ducted_ac_zone_off',
-          variables: { zone: 'Guest', zone_entity: 'climate.ac_guest' } },
+        domain: 'script', service: 'ducted_ac_zone_off',
+        data: { zone: 'Guest', zone_entity: 'climate.ac_guest' },
         target: undefined,
       });
       el.hass = makeHass({
