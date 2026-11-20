@@ -149,7 +149,11 @@ describe('MyPlace controls', () => {
       const actions = el.shadowRoot!.querySelector('.zone-actions') as HTMLElement;
       expect(actions).to.exist;
       expect(actions.querySelectorAll('button')).to.have.length(2);
-      expect(getComputedStyle(actions).display).to.equal('flex');
+      const layout = getComputedStyle(actions);
+      expect(layout.display).to.equal('grid');
+      expect(layout.gridTemplateColumns).to.equal('100px 44px');
+      const [power, crownButton] = [...actions.querySelectorAll('button')];
+      expect(power.getBoundingClientRect().top).to.equal(crownButton.getBoundingClientRect().top);
       const crown = actions.querySelector('button.master') as HTMLButtonElement;
       expect(crown.disabled).to.equal(false);
       expect(crown.getAttribute('aria-pressed')).to.equal('false');
