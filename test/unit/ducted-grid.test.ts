@@ -114,4 +114,31 @@ describe('material-ducted-thermostat-card', () => {
       .to.equal('clamp(160px, 23cqw, 260px)');
   });
 
+  it('keeps active zone setpoint dials disabled during system Dry mode', async () => {
+    card = document.createElement('material-ducted-thermostat-card') as MaterialDuctedThermostatCard;
+    card.setConfig({ type: 'custom:material-ducted-thermostat-card', zones, columns: 2 });
+    card.hass = makeHass({
+      'climate.ac': climateState({}, 'dry'),
+      'climate.ac_guest': climateState({}, 'cool'),
+      'climate.ac_master': climateState({}, 'off'),
+      'climate.ac_mike_s_den': climateState({}, 'off'),
+      'climate.ac_will_s_music': climateState({}, 'off'),
+    });
+    document.body.appendChild(card);
+    await card.updateComplete;
+    const children = [...card.shadowRoot!.querySelectorAll('material-thermostat-card')] as any[];
+    await Promise.all(children.map((child) => child.updateComplete));
+    await Promise.resolve();
+    expect(children[0].shadowRoot.querySelector('mt-circular-dial').disabled).to.equal(true);
+    expect(children[1].shadowRoot.querySelector('mt-circular-dial').disabled).to.equal(false);
+    card.hass = makeHass({
+      ...card.hass.states,
+      'climate.ac': climateState({}, 'cool'),
+    });
+    await card.updateComplete;
+    await Promise.all(children.map((child) => child.updateComplete));
+    await Promise.resolve();
+    expect(children[0].shadowRoot.querySelector('mt-circular-dial').disabled).to.equal(false);
+  });
+
 });
