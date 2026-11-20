@@ -34,6 +34,25 @@ describe('MyPlace controls', () => {
     } finally { el.remove(); }
   });
 
+  it('uses the configured control script for mode and fan commands', async () => {
+    const el = document.createElement('mt-myplace-system-controls');
+    el.entity = 'climate.ac';
+    el.controlScript = 'script.ducted_ac_control';
+    el.hass = makeHass({ 'climate.ac': climateState({ fan_mode: 'auto' }, 'cool') });
+    document.body.appendChild(el);
+    try {
+      await el.updateComplete;
+      const mode = el.shadowRoot!.querySelector('select[aria-label="Ducted HVAC mode"]') as HTMLSelectElement;
+      mode.value = 'heat';
+      mode.dispatchEvent(new Event('change'));
+      await el.updateComplete;
+      expect(el.hass.__calls[0]).to.deep.equal({
+        domain: 'script', service: 'ducted_ac_control',
+        data: { operation: 'mode', value: 'heat' }, target: undefined,
+      });
+    } finally { el.remove(); }
+  });
+
   it('renders controller selectors from the climate entity state', async () => {
     const el = document.createElement('mt-myplace-system-controls');
     el.entity = 'climate.ac';
