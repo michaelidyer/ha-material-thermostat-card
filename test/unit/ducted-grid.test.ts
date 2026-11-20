@@ -4,6 +4,16 @@ import '../../src/material-ducted-thermostat-card';
 import type { MaterialDuctedThermostatCard } from '../../src/material-ducted-thermostat-card';
 import { makeHass, climateState } from '../helpers';
 
+// Chromium can report a benign ResizeObserver loop while four nested dials
+// establish their sizes. The original card's test suite suppresses this exact
+// browser warning; keep the same narrowly scoped handling here.
+window.addEventListener('error', (event) => {
+  if (/ResizeObserver loop/.test(event.message)) {
+    event.stopImmediatePropagation();
+    event.preventDefault();
+  }
+});
+
 const zones = [
   { entity: 'climate.ac_guest', name: 'Guest' },
   { entity: 'climate.ac_master', name: 'Master' },
